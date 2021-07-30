@@ -2,71 +2,62 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/spf13/cobra"
 )
+
+type MatterData struct {
+	Title string
+	Date  string
+}
 
 var newCmd = &cobra.Command{
 	Use:   "new",
 	Short: "Create a new content on the website",
 	Run: func(cmd *cobra.Command, args []string) {
-		isSite := isDirSite()
-		if !isSite {
-			fmt.Println("new: couldn't find config file 'config.toml'")
-			return
-		}
-
 		if len(args) == 0 {
-			fmt.Println("new: please provide a new name for the content")
+			fmt.Println("new: please provide a name for the content, for example: golang/tutorial")
 			return
 		}
 
-		var createdFile *os.File
-		defer createdFile.Close()
-
-		path := args[0]
-		if strings.Contains(path, "/") {
-			parts := strings.Split(path, "/")
-
-			// something -> contents/something.md
-			// about/something -> contents/about/something.md
-			filepath := fmt.Sprintf("./contents/%s", filepath.Join(parts[:len(parts)-1]...))
-			err := os.MkdirAll(filepath, 0755)
-			if err != nil {
-				fmt.Println("new: error while creating new content")
-				return
-			}
-
-			createdFile, err = os.Create(fmt.Sprintf("%s/%s.md", filepath, parts[len(parts)-1]))
-			if err != nil {
-				fmt.Println("new: error while creating new content file")
-				return
-			}
-
+		if !hasConfig() {
+			fmt.Println("new: couldn't find a config.toml here. Maybe you should create a new site with \"golf new site <SITE_NAME>\"")
 			return
 		}
 
-		createdFile, err := os.Create(fmt.Sprintf("./contents/%s.md", path))
+		path := fmt.Sprintf("./contents/%s.md", args[0])
+		err := ensureDir(path)
 		if err != nil {
-			fmt.Println("new: error while creating new content file")
+			fmt.Println("new: failed to create new content to the site: ", err)
 			return
 		}
 
-		title := convertToTitle(string(path[len(path)-1]))
+		f, err := os.Create(path)
+		if err != nil {
+			fmt.Println("new: failed to create new content to the site: ", err)
+			return
+		}
+		defer f.Close()
+
+		filename := strings.TrimSuffix(filepath.Base(path), ".md")
+		postTitle := formatTitle(filename)
 
 		y, m, d := time.Now().Date()
-		date := fmt.Sprintf("%s-%d-%d", m, d, y)
-		contents := fmt.Sprintf("---\ntitle: \"%s\"\ndate: %s\n---", title, date)
+		postDate := fmt.Sprintf("%s %d, %d", m, d, y)
 
-		_, err = createdFile.Write([]byte(contents))
+		err = writeMatter(f, MatterData{postTitle, postDate})
 		if err != nil {
-			fmt.Println("new: error while writing to file")
+			fmt.Println("new: failed to write default contents to file: ", err)
 			return
 		}
+
+		fmt.Printf("%s was succesfully created\n", path)
 	},
 }
 
@@ -74,23 +65,53 @@ func init() {
 	newCmd.AddCommand(siteCmd)
 }
 
-func convertToTitle(slug string) string {
-	var title []string
-	str := "building-strings-in-golang"
+func formatTitle(slug string) string {
+	var title strings.Builder
+	slug = strings.ReplaceAll(slug, "-", " ")
 
-	hasMultipleWords := strings.Contains(str, "-")
-	if hasMultipleWords {
-		parts := strings.Split(str, "-")
-		for _, w := range parts {
-			title = append(title, strings.ToUpper(string(w[0]))+w[1:])
+	for i, r := range slug {
+		if i == 0 {
+			title.WriteRune(unicode.ToUpper(r))
+			continue
 		}
-		return strings.Join(title, " ")
+
+		if unicode.IsSpace(rune(slug[i-1])) {
+			title.WriteRune(unicode.ToUpper(r))
+			continue
+		}
+
+		title.WriteRune(r)
 	}
 
-	return strings.ToUpper(string(str[0])) + string(str[1:])
+	return title.String()
 }
 
-func isDirSite() bool {
+func writeMatter(w io.Writer, data MatterData) error {
+	contents := fmt.Sprintf(`---
+title: "%s"
+date: "%s"
+---`, data.Title, data.Date)
+
+	_, err := w.Write([]byte(contents))
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func ensureDir(fileName string) error {
+	dirName := filepath.Dir(fileName)
+	if _, err := os.Stat(dirName); err != nil {
+		err = os.MkdirAll(dirName, 0755)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func hasConfig() bool {
 	if _, err := os.Stat("config.toml"); os.IsNotExist(err) {
 		return false
 	}
