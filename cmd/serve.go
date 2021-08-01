@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/fs"
 	"path/filepath"
+	"time"
 
 	"github.com/Gabriel2233/golf/pkg/http"
 	"github.com/Gabriel2233/golf/pkg/markdown"
@@ -27,19 +28,11 @@ var serveCmd = &cobra.Command{
 			return
 		}
 
-		matters, err := markdown.GetAllMatters(paths)
-		if err != nil {
-			fmt.Println("serve: couldn't get matters")
-			return
-		}
+		now := time.Now()
+		posts := markdown.GetPosts(paths)
+		fmt.Printf("took %s to get %d posts\n", time.Since(now), len(posts))
 
-		posts, err := markdown.GetAllPosts(paths)
-		if err != nil {
-			fmt.Println("serve: couldn't get posts")
-			return
-		}
-
-		http.LaunchServer(matters, posts)
+		http.LaunchServer(posts)
 	},
 }
 

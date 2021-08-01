@@ -8,10 +8,10 @@ import (
 	"github.com/Gabriel2233/golf/pkg/markdown"
 )
 
-// this package is responsible fro launcing the webserver for the site
+// this package is responsible for launcing the webserver for the site
 // i need a way to get the posts here, so i can render them in the template
 
-func LaunchServer(matters []markdown.PostMatter, posts map[string]markdown.Post) {
+func LaunchServer(posts map[string]markdown.Post) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		html := `<html><body>
@@ -28,7 +28,13 @@ func LaunchServer(matters []markdown.PostMatter, posts map[string]markdown.Post)
 
 		tpl := template.Must(template.New("").Parse(html))
 
-		tpl.Execute(w, matters)
+		var postsArr []markdown.Post
+
+		for _, v := range posts {
+			postsArr = append(postsArr, v)
+		}
+
+		tpl.Execute(w, postsArr)
 	})
 	mux.HandleFunc("/posts/", func(w http.ResponseWriter, r *http.Request) {
 		postPath := string(r.URL.Path[len("/posts/"):])
@@ -52,5 +58,6 @@ func LaunchServer(matters []markdown.PostMatter, posts map[string]markdown.Post)
 		tpl.Execute(w, post)
 	})
 
+	log.Print("server up")
 	log.Fatal(http.ListenAndServe(":1414", mux))
 }
